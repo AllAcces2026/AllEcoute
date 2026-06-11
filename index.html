@@ -1,0 +1,593 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Supervision – Back4App (gratuit & synchronisé)</title>
+    <script src="https://npmcdn.com/parse/dist/parse.min.js"></script>
+    <style>
+        * { box-sizing: border-box; font-family: system-ui, 'Segoe UI', Roboto, sans-serif; }
+        body { background: #f0f2f5; margin: 0; padding: 20px; }
+        .container { max-width: 1400px; margin: 0 auto; }
+        .card { background: white; border-radius: 24px; box-shadow: 0 8px 20px rgba(0,0,0,0.05); padding: 1.5rem; margin-bottom: 2rem; }
+        .mode-selector { display: flex; gap: 1rem; margin-bottom: 2rem; justify-content: center; }
+        .mode-btn { background: #e2e8f0; border: none; padding: 0.7rem 2rem; border-radius: 40px; font-weight: bold; cursor: pointer; }
+        .mode-btn.active { background: #1e3a5f; color: white; }
+        .admin-view, .agent-view { display: none; }
+        .form-grid { display: flex; flex-wrap: wrap; gap: 1rem; margin-bottom: 1.5rem; }
+        .field { flex: 1 1 200px; }
+        label { font-weight: 600; display: block; margin-bottom: 0.3rem; font-size: 0.85rem; color: #1e4663; }
+        select, input, textarea { width: 100%; padding: 0.6rem; border: 1px solid #cbd5e1; border-radius: 12px; }
+        .criteria-group { background: #f8fafc; border-radius: 18px; padding: 1rem; margin: 1rem 0; }
+        .criteria-list { display: flex; flex-direction: column; gap: 0.8rem; }
+        .criteria-row { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; background: white; padding: 0.5rem 0.8rem; border-radius: 40px; border: 1px solid #e2e8f0; }
+        .criteria-text { flex: 2; font-size: 0.85rem; font-weight: 500; }
+        .score-badge { background: #eef2ff; padding: 0.3rem 1rem; border-radius: 40px; font-weight: bold; display: inline-block; }
+        button { background: #1e3a5f; color: white; border: none; padding: 0.7rem 1.8rem; border-radius: 40px; font-weight: 600; cursor: pointer; margin-right: 1rem; margin-top: 1rem; }
+        .btn-secondary { background: #e2e8f0; color: #1e293b; }
+        .eval-card { background: white; border-radius: 20px; padding: 1.2rem; margin-bottom: 1.2rem; border: 1px solid #e2e8f0; }
+        .eval-header { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; border-bottom: 1px solid #eef2ff; padding-bottom: 0.7rem; margin-bottom: 0.7rem; }
+        .audio-player { background: #f1f5f9; padding: 0.5rem; border-radius: 40px; margin: 0.7rem 0; }
+        .badge { background: #e9f5ef; padding: 0.2rem 0.6rem; border-radius: 40px; font-size: 0.75rem; font-weight: 500; }
+        .flex-between { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; }
+        .agent-search { background: #f8fafc; padding: 1rem; border-radius: 20px; margin-bottom: 1.5rem; display: flex; flex-wrap: wrap; gap: 1rem; align-items: flex-end; }
+        .criteria-detail { margin-left: 1rem; font-size: 0.85rem; margin-bottom: 0.5rem; }
+        .conforme { color: #15803d; font-weight: 500; }
+        .non-conforme { color: #b91c1c; font-weight: 500; }
+        .na { color: #6b7280; font-style: italic; }
+        .filter-bar { display: flex; flex-wrap: wrap; gap: 1rem; margin-bottom: 1rem; align-items: flex-end; }
+        .password-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center; z-index: 1000; }
+        .password-box { background: white; padding: 2rem; border-radius: 24px; width: 320px; text-align: center; }
+        .toast { position: fixed; bottom: 20px; right: 20px; background: #1e293b; color: white; padding: 0.8rem 1.5rem; border-radius: 40px; z-index: 2000; animation: fadeOut 3s forwards; }
+        @keyframes fadeOut { 0% { opacity: 1; } 70% { opacity: 1; } 100% { opacity: 0; visibility: hidden; } }
+        .audio-optional { display: flex; align-items: center; gap: 10px; margin: 10px 0; }
+        .audio-optional label { margin-bottom: 0; }
+    </style>
+</head>
+<body>
+<div class="container">
+    <div class="mode-selector">
+        <button id="adminModeBtn" class="mode-btn active">👑 Admin</button>
+        <button id="agentModeBtn" class="mode-btn">🎧 Conseiller</button>
+    </div>
+
+    <!-- Vue Admin -->
+    <div id="adminView" class="admin-view">
+        <div class="card">
+            <h2>✍️ Nouvelle évaluation</h2>
+            <div class="form-grid">
+                <div class="field"><label>📅 Date</label><input type="date" id="evalDate"></div>
+                <div class="field"><label>👤 Agent</label><input type="text" id="agentName" list="agentList" placeholder="Nom / matricule"></div>
+                <datalist id="agentList"></datalist>
+                <div class="field"><label>📞 Tél client</label><input type="text" id="clientPhone"></div>
+                <div class="field"><label>🔽 Ligne</label>
+                    <select id="lineSelect">
+                        <option value="L01">Ligne 01</option>
+                        <option value="L08">Ligne 08</option>
+                        <option value="resiliation">Ligne Résiliation</option>
+                    </select>
+                </div>
+                <div class="field" id="motifFieldL01"><label>📌 Motif (L01)</label>
+                    <select id="motifSelect">
+                        <option value="colis">Suivi de colis</option>
+                        <option value="train">Train</option>
+                        <option value="avion">Avion</option>
+                        <option value="emploi">Emploi</option>
+                        <option value="retraite">Retraite</option>
+                        <option value="convention">Convention</option>
+                        <option value="conciergerie">Conciergerie</option>
+                    </select>
+                </div>
+            </div>
+            <div id="dynamicCriteria"></div>
+            <div class="criteria-group">
+                <h3>🎙️ Enregistrement de l'appel</h3>
+                <div class="audio-optional">
+                    <input type="checkbox" id="noAudioCheckbox">
+                    <label for="noAudioCheckbox">📵 Pas d'enregistrement (appel sans audio)</label>
+                </div>
+                <input type="file" id="audioFile" accept="audio/mpeg,audio/wav,audio/ogg">
+                <div id="audioPreview" style="display:none;"><audio controls style="width:100%;"></audio></div>
+                <label>📝 Commentaire coaching</label>
+                <textarea id="coachingComment" rows="2" style="width:100%; margin-top:8px;"></textarea>
+            </div>
+            <div class="flex-between">
+                <div><span class="score-badge" id="liveScore">Score : -- %</span></div>
+                <div><button id="saveEvalBtn">💾 Enregistrer</button><button id="resetFormBtn" class="btn-secondary">⟳ Réinitialiser</button></div>
+            </div>
+        </div>
+        <div class="card">
+            <h2>📋 Toutes les évaluations</h2>
+            <div class="filter-bar">
+                <div class="field"><label>🔍 Agent</label><input type="text" id="filterAgent" placeholder="Nom agent"></div>
+                <div class="field"><label>📞 Ligne</label><select id="filterLine"><option value="">Toutes</option><option value="L01">L01</option><option value="L08">L08</option><option value="resiliation">Résiliation</option></select></div>
+                <div class="field"><label>⭐ Score min</label><input type="number" id="filterScoreMin" min="0" max="100" step="5" placeholder="0"></div>
+                <button id="applyFilters">🔎 Appliquer</button>
+                <button id="exportDataBtn" class="btn-secondary">📤 Export JSON</button>
+            </div>
+            <div id="allEvalsList">Chargement...</div>
+        </div>
+    </div>
+
+    <!-- Vue Conseiller -->
+    <div id="agentView" class="agent-view">
+        <div class="card">
+            <h2>🔍 Mes évaluations</h2>
+            <div class="agent-search">
+                <div class="field"><label>👤 Votre nom</label><input type="text" id="agentSearchName" list="agentListCounselor" placeholder="Choisissez votre nom">
+                <datalist id="agentListCounselor"></datalist></div>
+                <button id="searchAgentEvals">🔎 Afficher mes évaluations</button>
+            </div>
+            <div id="agentEvalsList"><div style="text-align:center; color:#6b7280; padding:2rem;">Entrez votre nom et cliquez sur "Afficher"</div></div>
+        </div>
+    </div>
+</div>
+
+<script>
+    // ========== BACK4APP CONFIGURATION (vos clés) ==========
+    const APP_ID = "39yGUPGhGmHN1kZQXKX77B1MdZlePd3hQYF0Wn1S";
+    const JS_KEY = "FQzakQO4axFhe4k6LEYP2yak3bUth16kIrRqvpvE";
+    const SERVER_URL = "https://parseapi.back4app.com";
+
+    Parse.initialize(APP_ID, JS_KEY);
+    Parse.serverURL = SERVER_URL;
+
+    const ADMIN_PASSWORD = "superviseur";
+    let adminAuthenticated = false;
+
+    // ========== CONFIGURATION DES CRITÈRES (identique à votre version) ==========
+    const CRITERIA_CONFIG = {
+        L01: {
+            base: ["Accueil complet (bonjour, nom, service)","Écoute active (reformule, ne coupe pas)","Justifie que le service est exclusif au 08","Donne le numéro 08 verbalement (clair, répété)","Vérifie que le client a noté le numéro","Annonce l'envoi d'un SMS avec le numéro 08","Confirme l'envoi du SMS (ou vérifie réception)","Encourage à appeler rapidement (délai, horaires)","Clôture positive, remercie (sans solution directe)"],
+            global: ["Phrases de confiance (global)","Gestion des objections (global)"],
+            hasConversion: true
+        },
+        L08: {
+            base: ["Accueil professionnel avec identification","Identifie rapidement le motif","Apporte une solution précise","Gère les éventuelles réclamations","Vérifie la satisfaction","Clôture poliment"],
+            global: [],
+            hasConversion: false
+        },
+        resiliation: {
+            base: ["Accueil empathique","Demande la raison de résiliation","Reformule la raison","Explique le consentement","Vérifie le consentement rempli","Recueille la signature","Enregistre le motif CRM","Clôture proprement"],
+            global: [],
+            hasConsent: true
+        }
+    };
+
+    // ========== FONCTIONS PARSE (CRUD) ==========
+    async function getAllEvaluations() {
+        const query = new Parse.Query('Evaluation');
+        query.descending('date');
+        const results = await query.find();
+        return results.map(obj => {
+            const json = obj.toJSON();
+            return { id: obj.id, ...json, audioFile: json.audioFile };
+        });
+    }
+
+    async function saveEvaluation(evalData, audioFile) {
+        const EvalClass = Parse.Object.extend('Evaluation');
+        const ev = new EvalClass();
+        let audioParseFile = null;
+        if (audioFile) {
+            audioParseFile = new Parse.File(`audio_${Date.now()}_${audioFile.name}`, audioFile);
+            await audioParseFile.save();
+        }
+        ev.set('date', evalData.date);
+        ev.set('agentName', evalData.agentName);
+        ev.set('clientPhone', evalData.clientPhone);
+        ev.set('line', evalData.line);
+        ev.set('lineLabel', evalData.lineLabel);
+        ev.set('motif', evalData.motif);
+        ev.set('score', evalData.score);
+        ev.set('coachingComment', evalData.coachingComment);
+        ev.set('details', evalData.details);
+        if (audioParseFile) ev.set('audioFile', audioParseFile);
+        await ev.save();
+    }
+
+    async function updateEvaluation(id, evalData, audioFile, oldAudioFileObj) {
+        const query = new Parse.Query('Evaluation');
+        const ev = await query.get(id);
+        if (audioFile) {
+            if (oldAudioFileObj) {
+                try { await oldAudioFileObj.destroy(); } catch(e) {}
+            }
+            const newAudio = new Parse.File(`audio_${Date.now()}_${audioFile.name}`, audioFile);
+            await newAudio.save();
+            ev.set('audioFile', newAudio);
+        }
+        ev.set('date', evalData.date);
+        ev.set('agentName', evalData.agentName);
+        ev.set('clientPhone', evalData.clientPhone);
+        ev.set('line', evalData.line);
+        ev.set('lineLabel', evalData.lineLabel);
+        ev.set('motif', evalData.motif);
+        ev.set('score', evalData.score);
+        ev.set('coachingComment', evalData.coachingComment);
+        ev.set('details', evalData.details);
+        await ev.save();
+    }
+
+    async function deleteEvaluation(id, audioFileObj) {
+        if (audioFileObj) {
+            try { await audioFileObj.destroy(); } catch(e) {}
+        }
+        const query = new Parse.Query('Evaluation');
+        const ev = await query.get(id);
+        await ev.destroy();
+    }
+
+    // ========== FORMULAIRE DYNAMIQUE DES CRITÈRES ==========
+    function renderCriteriaForm(line) {
+        const container = document.getElementById('dynamicCriteria');
+        const config = CRITERIA_CONFIG[line];
+        if (!config) return;
+        let html = `<div class="criteria-group"><h3>📋 Critères</h3><div id="criteriaBaseList"></div></div>`;
+        if (config.global.length) html += `<div class="criteria-group"><h3>💬 Items globaux</h3><div id="criteriaGlobalList"></div></div>`;
+        if (config.hasConversion) html += `<div class="criteria-group" style="background:#fef2f2;"><h3>⚠️ Conversion</h3><div class="criteria-list"><div class="criteria-row"><div class="criteria-text">Client a accepté d'appeler le 08 (pas de refus/raccroché)</div><div class="criteria-eval"><input type="checkbox" id="conversionSuccess"></div></div></div></div>`;
+        if (config.hasConsent) html += `<div class="criteria-group" style="background:#fef2f2;"><h3>📄 Consentement</h3><div class="criteria-list"><div class="criteria-row"><div class="criteria-text">Consentement signé et bien rempli</div><div class="criteria-eval"><input type="checkbox" id="consentementOk"></div></div></div></div>`;
+        container.innerHTML = html;
+        const baseContainer = document.getElementById('criteriaBaseList');
+        baseContainer.innerHTML = '';
+        config.base.forEach((item, idx) => {
+            const div = document.createElement('div');
+            div.className = 'criteria-row';
+            div.innerHTML = `<div class="criteria-text">${escapeHtml(item)}</div><div class="criteria-eval"><select id="base_${idx}"><option value="conforme">Conforme</option><option value="non_conforme">Non conforme</option><option value="na">Non applicable</option></select></div>`;
+            baseContainer.appendChild(div);
+        });
+        if (config.global.length) {
+            const globalContainer = document.getElementById('criteriaGlobalList');
+            globalContainer.innerHTML = '';
+            config.global.forEach((item, idx) => {
+                const div = document.createElement('div');
+                div.className = 'criteria-row';
+                div.innerHTML = `<div class="criteria-text">${escapeHtml(item)}</div><div class="criteria-eval"><select id="global_${idx}"><option value="conforme">Conforme</option><option value="non_conforme">Non conforme</option><option value="na">Non applicable</option></select></div>`;
+                globalContainer.appendChild(div);
+            });
+        }
+        attachLiveScoreListener();
+        updateLiveScoreAdmin();
+    }
+
+    function collectCurrentScores(line) {
+        const config = CRITERIA_CONFIG[line];
+        const baseValues = config.base.map((_, idx) => document.getElementById(`base_${idx}`)?.value || 'conforme');
+        const globalValues = config.global.map((_, idx) => document.getElementById(`global_${idx}`)?.value || 'conforme');
+        const conversion = document.getElementById('conversionSuccess')?.checked || false;
+        const consent = document.getElementById('consentementOk')?.checked || false;
+        return { baseValues, globalValues, conversion, consent };
+    }
+
+    function computeScore(line, scores) {
+        const { baseValues, globalValues, conversion, consent } = scores;
+        if (line === 'L01') {
+            if (!conversion) return 0;
+            const all = [...baseValues, ...globalValues];
+            let total = 0, conforme = 0;
+            all.forEach(v => { if (v !== 'na') { total++; if (v === 'conforme') conforme++; } });
+            return total === 0 ? 0 : Math.round((conforme / total) * 100);
+        } else if (line === 'L08') {
+            let total = 0, conforme = 0;
+            baseValues.forEach(v => { if (v !== 'na') { total++; if (v === 'conforme') conforme++; } });
+            return total === 0 ? 0 : Math.round((conforme / total) * 100);
+        } else {
+            if (!consent) return 0;
+            let total = 0, conforme = 0;
+            baseValues.forEach(v => { if (v !== 'na') { total++; if (v === 'conforme') conforme++; } });
+            return total === 0 ? 0 : Math.round((conforme / total) * 100);
+        }
+    }
+
+    function updateLiveScoreAdmin() {
+        const line = document.getElementById('lineSelect').value;
+        const scores = collectCurrentScores(line);
+        const score = computeScore(line, scores);
+        document.getElementById('liveScore').innerText = `Score : ${score}%`;
+    }
+
+    function attachLiveScoreListener() {
+        const selects = document.querySelectorAll('#dynamicCriteria select, #dynamicCriteria input[type="checkbox"]');
+        selects.forEach(el => el.removeEventListener('change', updateLiveScoreAdmin));
+        selects.forEach(el => el.addEventListener('change', updateLiveScoreAdmin));
+    }
+
+    // ========== GESTION AUDIO & SAUVEGARDE ==========
+    let currentAudioFile = null;
+    let currentAudioParseFile = null;
+    let editingId = null;
+    const audioFileInput = document.getElementById('audioFile');
+    const noAudioCheckbox = document.getElementById('noAudioCheckbox');
+
+    noAudioCheckbox.addEventListener('change', (e) => {
+        const disabled = e.target.checked;
+        audioFileInput.disabled = disabled;
+        if (disabled) {
+            audioFileInput.value = '';
+            currentAudioFile = null;
+            document.getElementById('audioPreview').style.display = 'none';
+        }
+    });
+    audioFileInput.addEventListener('change', (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+        if (!file.type.startsWith('audio/')) { showToast("Format non supporté","error"); return; }
+        currentAudioFile = file;
+        const url = URL.createObjectURL(file);
+        const previewDiv = document.getElementById('audioPreview');
+        previewDiv.querySelector('audio').src = url;
+        previewDiv.style.display = 'block';
+        showToast("Audio chargé","success");
+    });
+
+    async function collectAndSave() {
+        const date = document.getElementById('evalDate').value;
+        const agentName = document.getElementById('agentName').value.trim();
+        const clientPhone = document.getElementById('clientPhone').value.trim();
+        const line = document.getElementById('lineSelect').value;
+        const coaching = document.getElementById('coachingComment').value;
+        if (!date || !agentName) { showToast("Date et agent requis","error"); return; }
+        let motif = null;
+        if (line === 'L01') {
+            const raw = document.getElementById('motifSelect').value;
+            const map = { colis:'Colis', train:'Train', avion:'Avion', emploi:'Emploi', retraite:'Retraite', convention:'Convention', conciergerie:'Conciergerie' };
+            motif = map[raw];
+        }
+        const scores = collectCurrentScores(line);
+        const score = computeScore(line, scores);
+        const lineLabel = line === 'L01' ? 'Ligne 01' : (line === 'L08' ? 'Ligne 08' : 'Ligne Résiliation');
+        const evalObj = { date, agentName, clientPhone, line, lineLabel, motif, score, coachingComment: coaching, details: { type: line, ...scores } };
+        try {
+            if (editingId !== null) {
+                await updateEvaluation(editingId, evalObj, currentAudioFile, currentAudioParseFile);
+                showToast("Évaluation modifiée","success");
+                editingId = null;
+                document.getElementById('saveEvalBtn').innerText = "💾 Enregistrer";
+                currentAudioParseFile = null;
+            } else {
+                await saveEvaluation(evalObj, currentAudioFile);
+                showToast("Évaluation sauvegardée","success");
+            }
+            resetAdminForm();
+            renderAllEvals();
+            updateAgentDatalist();
+        } catch(err) { console.error(err); showToast("Erreur sauvegarde","error"); }
+    }
+
+    function resetAdminForm() {
+        document.getElementById('evalDate').value = new Date().toISOString().slice(0,10);
+        document.getElementById('agentName').value = '';
+        document.getElementById('clientPhone').value = '';
+        document.getElementById('coachingComment').value = '';
+        audioFileInput.value = '';
+        document.getElementById('audioPreview').style.display = 'none';
+        currentAudioFile = null;
+        currentAudioParseFile = null;
+        noAudioCheckbox.checked = false;
+        audioFileInput.disabled = false;
+        document.getElementById('lineSelect').value = 'L01';
+        renderCriteriaForm('L01');
+        editingId = null;
+        document.getElementById('saveEvalBtn').innerText = "💾 Enregistrer";
+        updateLiveScoreAdmin();
+    }
+
+    async function editEvaluation(id) {
+        const evals = await getAllEvaluations();
+        const evalData = evals.find(e => e.id === id);
+        if (!evalData) return;
+        editingId = id;
+        document.getElementById('evalDate').value = evalData.date;
+        document.getElementById('agentName').value = evalData.agentName;
+        document.getElementById('clientPhone').value = evalData.clientPhone || '';
+        document.getElementById('lineSelect').value = evalData.line;
+        document.getElementById('coachingComment').value = evalData.coachingComment || '';
+        if (evalData.line === 'L01' && evalData.motif) {
+            const invMap = { Colis:'colis', Train:'train', Avion:'avion', Emploi:'emploi', Retraite:'retraite', Convention:'convention', Conciergerie:'conciergerie' };
+            document.getElementById('motifSelect').value = invMap[evalData.motif] || 'colis';
+        }
+        renderCriteriaForm(evalData.line);
+        const details = evalData.details;
+        if (details) {
+            for (let i = 0; i < details.baseValues?.length; i++) {
+                const sel = document.getElementById(`base_${i}`);
+                if (sel) sel.value = details.baseValues[i];
+            }
+            for (let i = 0; i < details.globalValues?.length; i++) {
+                const sel = document.getElementById(`global_${i}`);
+                if (sel) sel.value = details.globalValues[i];
+            }
+            if (details.conversion !== undefined) document.getElementById('conversionSuccess').checked = details.conversion;
+            if (details.consent !== undefined) document.getElementById('consentementOk').checked = details.consent;
+        }
+        if (evalData.audioFile && evalData.audioFile.url) {
+            const previewDiv = document.getElementById('audioPreview');
+            previewDiv.querySelector('audio').src = evalData.audioFile.url;
+            previewDiv.style.display = 'block';
+            currentAudioParseFile = evalData.audioFile;
+        }
+        document.getElementById('saveEvalBtn').innerText = "✏️ Mettre à jour";
+        showToast("Mode édition activé","info");
+    }
+
+    // ========== AFFICHAGE ADMIN AVEC FILTRES ==========
+    async function renderAllEvals() {
+        let evals = await getAllEvaluations();
+        const agentFilter = document.getElementById('filterAgent').value.trim().toLowerCase();
+        const lineFilter = document.getElementById('filterLine').value;
+        const scoreMin = parseInt(document.getElementById('filterScoreMin').value) || 0;
+        if (agentFilter) evals = evals.filter(e => e.agentName.toLowerCase().includes(agentFilter));
+        if (lineFilter) evals = evals.filter(e => e.line === lineFilter);
+        evals = evals.filter(e => e.score >= scoreMin);
+        const container = document.getElementById('allEvalsList');
+        if (!evals.length) { container.innerHTML = '<div>Aucune évaluation</div>'; return; }
+        container.innerHTML = '';
+        for (const e of evals) {
+            const card = document.createElement('div');
+            card.className = 'eval-card';
+            let audioHtml = e.audioFile?.url ? `<audio controls src="${e.audioFile.url}" style="width:100%;"></audio>` : '<div class="audio-player">🔇 Aucun enregistrement</div>';
+            card.innerHTML = `
+                <div class="eval-header">
+                    <div><strong>${escapeHtml(e.agentName)}</strong> | ${e.date} | ${e.lineLabel} ${e.motif ? `(${e.motif})` : ''}<br><span class="badge">Score : ${e.score}%</span></div>
+                    <div><button class="edit-btn" data-id="${e.id}" style="background:#f59e0b;">✏️ Éditer</button><button class="delete-btn" data-id="${e.id}" style="background:#b91c1c;">🗑️ Supprimer</button></div>
+                </div>
+                <div><strong>Coaching :</strong> ${escapeHtml(e.coachingComment || '—')}</div>
+                <div class="audio-player">${audioHtml}</div>
+            `;
+            container.appendChild(card);
+        }
+        document.querySelectorAll('.delete-btn').forEach(btn => {
+            btn.addEventListener('click', async (e) => {
+                const id = btn.dataset.id;
+                const evalData = evals.find(ev => ev.id === id);
+                if (confirm('Supprimer ?')) {
+                    await deleteEvaluation(id, evalData?.audioFile);
+                    renderAllEvals();
+                    if (document.getElementById('agentView').style.display === 'block') renderAgentEvals();
+                    updateAgentDatalist();
+                }
+            });
+        });
+        document.querySelectorAll('.edit-btn').forEach(btn => {
+            btn.addEventListener('click', async () => {
+                await editEvaluation(btn.dataset.id);
+                document.getElementById('adminModeBtn').click();
+            });
+        });
+    }
+
+    // ========== VUE CONSEILLER ==========
+    async function renderAgentEvals() {
+        const agentName = document.getElementById('agentSearchName').value.trim();
+        if (!agentName) { showToast("Entrez votre nom","error"); return; }
+        const all = await getAllEvaluations();
+        const filtered = all.filter(e => e.agentName && e.agentName.localeCompare(agentName, undefined, { sensitivity: 'base' }) === 0);
+        const container = document.getElementById('agentEvalsList');
+        if (!filtered.length) {
+            container.innerHTML = `<div style="color:#b91c1c; padding:2rem;">Aucune évaluation pour "${escapeHtml(agentName)}"</div>`;
+            return;
+        }
+        container.innerHTML = '';
+        for (const e of filtered) {
+            const card = document.createElement('div');
+            card.className = 'eval-card';
+            let detailsHtml = `<div><strong>📋 Détails des critères :</strong></div><div class="criteria-detail">`;
+            const config = CRITERIA_CONFIG[e.line];
+            if (e.details?.baseValues) {
+                config.base.forEach((crit, idx) => {
+                    const val = e.details.baseValues[idx];
+                    let cls = val === 'conforme' ? 'conforme' : (val === 'non_conforme' ? 'non-conforme' : 'na');
+                    let txt = val === 'conforme' ? '✅ Conforme' : (val === 'non_conforme' ? '❌ Non conforme' : '⚪ Non applicable');
+                    detailsHtml += `<div><span class="${cls}">${txt}</span> — ${escapeHtml(crit)}</div>`;
+                });
+                if (e.details.globalValues) {
+                    config.global.forEach((crit, idx) => {
+                        const val = e.details.globalValues[idx];
+                        let cls = val === 'conforme' ? 'conforme' : (val === 'non_conforme' ? 'non-conforme' : 'na');
+                        let txt = val === 'conforme' ? '✅ Conforme' : (val === 'non_conforme' ? '❌ Non conforme' : '⚪ Non applicable');
+                        detailsHtml += `<div><span class="${cls}">${txt}</span> — ${escapeHtml(crit)}</div>`;
+                    });
+                }
+                if (e.line === 'L01') detailsHtml += `<div>🔄 Conversion : ${e.details.conversion ? '✅ Accepté' : '❌ Refusé'}</div>`;
+                if (e.line === 'resiliation') detailsHtml += `<div>📄 Consentement : ${e.details.consent ? '✅ Signé' : '❌ Non conforme'}</div>`;
+            }
+            detailsHtml += `</div>`;
+            let audioHtml = e.audioFile?.url ? `<audio controls src="${e.audioFile.url}" style="width:100%;"></audio>` : '<div class="audio-player">🔇 Aucun enregistrement</div>';
+            card.innerHTML = `
+                <div class="eval-header"><div><strong>${escapeHtml(e.agentName)}</strong> | ${e.date} | ${e.lineLabel}<br><span class="badge">Score : ${e.score}%</span></div></div>
+                <div><strong>💬 Commentaire superviseur :</strong><br>${escapeHtml(e.coachingComment || '—')}</div><hr>${detailsHtml}<hr><div class="audio-player">${audioHtml}</div>
+            `;
+            container.appendChild(card);
+        }
+    }
+
+    async function updateAgentDatalist() {
+        const evals = await getAllEvaluations();
+        const agents = [...new Set(evals.map(e => e.agentName).filter(Boolean))];
+        document.getElementById('agentList').innerHTML = agents.map(a => `<option value="${escapeHtml(a)}">`).join('');
+        document.getElementById('agentListCounselor').innerHTML = agents.map(a => `<option value="${escapeHtml(a)}">`).join('');
+    }
+
+    async function exportData() {
+        const evals = await getAllEvaluations();
+        const exportObj = evals.map(({ id, audioFile, ...rest }) => rest);
+        const dataStr = JSON.stringify(exportObj, null, 2);
+        const blob = new Blob([dataStr], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'evaluations.json';
+        a.click();
+        URL.revokeObjectURL(url);
+        showToast("Export JSON réussi (sans les audios)","success");
+    }
+
+    function showToast(msg, type) {
+        const toast = document.createElement('div');
+        toast.className = 'toast';
+        toast.style.background = type === 'error' ? '#b91c1c' : (type === 'success' ? '#15803d' : '#1e3a5f');
+        toast.innerText = msg;
+        document.body.appendChild(toast);
+        setTimeout(() => toast.remove(), 3000);
+    }
+
+    // ========== AUTHENTIFICATION ADMIN ==========
+    function showPasswordPrompt() {
+        const overlay = document.createElement('div');
+        overlay.className = 'password-overlay';
+        overlay.innerHTML = `<div class="password-box"><h3>🔐 Accès administrateur</h3><input type="password" id="adminPassword" placeholder="Mot de passe" autofocus><button id="submitPassword">OK</button></div>`;
+        document.body.appendChild(overlay);
+        const submitBtn = document.getElementById('submitPassword');
+        const pwdInput = document.getElementById('adminPassword');
+        const checkPassword = () => {
+            if (pwdInput.value === ADMIN_PASSWORD) {
+                adminAuthenticated = true;
+                overlay.remove();
+                showAdminContent();
+            } else { alert("Mot de passe incorrect"); overlay.remove(); showAgent(); }
+        };
+        submitBtn.onclick = checkPassword;
+        pwdInput.addEventListener('keypress', (e) => { if (e.key === 'Enter') checkPassword(); });
+    }
+
+    function showAdminContent() {
+        document.getElementById('adminView').style.display = 'block';
+        document.getElementById('agentView').style.display = 'none';
+        document.getElementById('adminModeBtn').classList.add('active');
+        document.getElementById('agentModeBtn').classList.remove('active');
+        renderAllEvals();
+        updateAgentDatalist();
+        renderCriteriaForm(document.getElementById('lineSelect').value);
+    }
+
+    function showAgent() {
+        document.getElementById('adminView').style.display = 'none';
+        document.getElementById('agentView').style.display = 'block';
+        document.getElementById('agentModeBtn').classList.add('active');
+        document.getElementById('adminModeBtn').classList.remove('active');
+        updateAgentDatalist();
+    }
+
+    // ========== INITIALISATION ==========
+    window.addEventListener('DOMContentLoaded', async () => {
+        document.getElementById('lineSelect').addEventListener('change', (e) => renderCriteriaForm(e.target.value));
+        document.getElementById('saveEvalBtn').addEventListener('click', collectAndSave);
+        document.getElementById('resetFormBtn').addEventListener('click', resetAdminForm);
+        document.getElementById('searchAgentEvals').addEventListener('click', renderAgentEvals);
+        document.getElementById('applyFilters').addEventListener('click', renderAllEvals);
+        document.getElementById('exportDataBtn').addEventListener('click', exportData);
+        document.getElementById('adminModeBtn').addEventListener('click', () => { if (!adminAuthenticated) showPasswordPrompt(); else showAdminContent(); });
+        document.getElementById('agentModeBtn').addEventListener('click', showAgent);
+        document.getElementById('evalDate').value = new Date().toISOString().slice(0,10);
+        renderCriteriaForm('L01');
+        showAgent();  // Démarre en mode conseiller
+        updateAgentDatalist();
+    });
+
+    function escapeHtml(str) {
+        if (!str) return '';
+        return str.replace(/[&<>]/g, m => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;' }[m]));
+    }
+</script>
+</body>
+</html>
