@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Supervision – Back4App (gratuit & synchronisé)</title>
+    <title>Supervision – Back4App (synchronisé)</title>
     <script src="https://npmcdn.com/parse/dist/parse.min.js"></script>
     <style>
         * { box-sizing: border-box; font-family: system-ui, 'Segoe UI', Roboto, sans-serif; }
@@ -124,7 +124,7 @@
 </div>
 
 <script>
-    // ========== BACK4APP CONFIGURATION (vos clés) ==========
+    // ========== BACK4APP CONFIGURATION (CLÉS EXACTES) ==========
     const APP_ID = "39yGUPGhGmHN1kZQXKX77B1MdZlePd3hQYF0Wn1S";
     const JS_KEY = "FQzakQO4axFhe4k6LEYP2yak3bUth16kIrRqvpvE";
     const SERVER_URL = "https://parseapi.back4app.com";
@@ -135,7 +135,7 @@
     const ADMIN_PASSWORD = "superviseur";
     let adminAuthenticated = false;
 
-    // ========== CONFIGURATION DES CRITÈRES (identique à votre version) ==========
+    // ========== CONFIGURATION DES CRITÈRES ==========
     const CRITERIA_CONFIG = {
         L01: {
             base: ["Accueil complet (bonjour, nom, service)","Écoute active (reformule, ne coupe pas)","Justifie que le service est exclusif au 08","Donne le numéro 08 verbalement (clair, répété)","Vérifie que le client a noté le numéro","Annonce l'envoi d'un SMS avec le numéro 08","Confirme l'envoi du SMS (ou vérifie réception)","Encourage à appeler rapidement (délai, horaires)","Clôture positive, remercie (sans solution directe)"],
@@ -218,7 +218,7 @@
         await ev.destroy();
     }
 
-    // ========== FORMULAIRE DYNAMIQUE DES CRITÈRES ==========
+    // ========== FORMULAIRE DYNAMIQUE ==========
     function renderCriteriaForm(line) {
         const container = document.getElementById('dynamicCriteria');
         const config = CRITERIA_CONFIG[line];
@@ -292,7 +292,7 @@
         selects.forEach(el => el.addEventListener('change', updateLiveScoreAdmin));
     }
 
-    // ========== GESTION AUDIO & SAUVEGARDE ==========
+    // ========== GESTION AUDIO ==========
     let currentAudioFile = null;
     let currentAudioParseFile = null;
     let editingId = null;
@@ -351,7 +351,10 @@
             resetAdminForm();
             renderAllEvals();
             updateAgentDatalist();
-        } catch(err) { console.error(err); showToast("Erreur sauvegarde","error"); }
+        } catch(err) {
+            console.error("Erreur complète:", err);
+            showToast("Erreur : " + (err.message || err), "error");
+        }
     }
 
     function resetAdminForm() {
@@ -410,7 +413,7 @@
         showToast("Mode édition activé","info");
     }
 
-    // ========== AFFICHAGE ADMIN AVEC FILTRES ==========
+    // ========== AFFICHAGE ADMIN ==========
     async function renderAllEvals() {
         let evals = await getAllEvaluations();
         const agentFilter = document.getElementById('filterAgent').value.trim().toLowerCase();
